@@ -1,9 +1,18 @@
 # Live Translation Overlay
 
-A free, browser-based Japanese-to-English live subtitle overlay for presentations.
+A free, browser-based Japanese-and-English live subtitle overlay for presentations.
 It uses Chrome speech recognition, Chrome's built-in Translator API, and Document
 Picture-in-Picture to place an always-on-top subtitle window over Canva or
 another presentation.
+
+## Features
+
+- Japanese → English translation
+- English → Japanese translation
+- Adjustable black-window opacity
+- Adjustable font size, family, and color
+- Adjustable overlay-window width and height
+- Default appearance: white font on a black window
 
 ## Requirements
 
@@ -27,12 +36,18 @@ No build command, dependency installation, API key, or server is required.
 
 ## Use
 
-1. Click **Prepare translation** and wait until the Japanese-to-English model is ready.
-2. Click **Open floating overlay**.
-3. Drag the floating subtitle window to the bottom of the screen.
-4. Click **Start listening** and allow microphone access.
-5. Open Canva in another tab or window and start the presentation.
-6. Speak Japanese in short sentences with natural pauses.
+1. Select **Japanese → English** or **English → Japanese**.
+2. Adjust opacity, font, font color, font size, and requested window size.
+3. Click **Prepare translation** and wait until the selected model is ready.
+4. Click **Open floating overlay**.
+5. Drag the floating subtitle window to the bottom of the screen.
+6. Click **Start listening** and allow microphone access.
+7. Open Canva in another tab or window and start the presentation.
+8. Speak the selected source language in short sentences with natural pauses.
+
+Appearance settings update the open overlay immediately. After entering a new
+width or height, click **Apply size**. Chrome may limit extremely large or small
+Picture-in-Picture window sizes.
 
 Keep the control page open. Closing it also closes the floating overlay.
 

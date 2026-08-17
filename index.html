@@ -73,6 +73,71 @@
       gap: 12px;
     }
 
+    .settings {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+      padding-bottom: 20px;
+      border-bottom: 3px solid var(--ink);
+    }
+
+    .field {
+      display: grid;
+      gap: 7px;
+      font-size: .9rem;
+      font-weight: 800;
+    }
+
+    .field.full { grid-column: 1 / -1; }
+
+    .field-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    select,
+    input[type="number"] {
+      width: 100%;
+      min-height: 44px;
+      padding: 8px 10px;
+      border: 2px solid var(--ink);
+      color: var(--ink);
+      background: #fff;
+      font: inherit;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--blue);
+    }
+
+    input[type="color"] {
+      width: 100%;
+      height: 44px;
+      padding: 3px;
+      border: 2px solid var(--ink);
+      background: #fff;
+      cursor: pointer;
+    }
+
+    .window-size {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 8px;
+      align-items: end;
+    }
+
+    #resizeButton {
+      width: auto;
+      min-height: 44px;
+      padding: 8px 14px;
+      background: var(--blue);
+      color: #fff;
+      text-align: center;
+    }
+
     button {
       width: 100%;
       min-height: 54px;
@@ -147,20 +212,71 @@
     @media (max-width: 540px) {
       main { padding-top: 32px; }
       .panel { padding: 16px; box-shadow: 6px 6px 0 var(--ink); }
+      .settings { grid-template-columns: 1fr; }
+      .field.full { grid-column: auto; }
+      .window-size { grid-template-columns: 1fr 1fr; }
+      #resizeButton { grid-column: 1 / -1; width: 100%; }
       .support { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
   <main>
-    <span class="eyebrow">日本語 → English</span>
+    <span class="eyebrow" id="directionBadge">日本語 → English</span>
     <h1>Live translation overlay</h1>
     <p class="intro">
-      Speak Japanese and show Japanese–English subtitles in a floating,
-      always-on-top window over Canva or another presentation.
+      Translate Japanese and English speech in either direction and show it in
+      a customizable, always-on-top window over Canva or another presentation.
     </p>
 
     <section class="panel" aria-label="Translation controls">
+      <div class="settings" aria-label="Overlay settings">
+        <label class="field full">
+          Translation direction / 翻訳方向
+          <select id="directionSelect">
+            <option value="ja-en">Japanese → English / 日本語 → 英語</option>
+            <option value="en-ja">English → Japanese / 英語 → 日本語</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span class="field-head"><span>Window opacity / 透明度</span><output id="opacityOutput">100%</output></span>
+          <input id="opacityInput" type="range" min="20" max="100" value="100">
+        </label>
+
+        <label class="field">
+          Font color / 文字色
+          <input id="fontColorInput" type="color" value="#ffffff">
+        </label>
+
+        <label class="field">
+          <span class="field-head"><span>Font size / 文字サイズ</span><output id="fontSizeOutput">38 px</output></span>
+          <input id="fontSizeInput" type="range" min="20" max="64" value="38">
+        </label>
+
+        <label class="field">
+          Font / フォント
+          <select id="fontSelect">
+            <option value="sans">Sans-serif / ゴシック体</option>
+            <option value="serif">Serif / 明朝体</option>
+            <option value="mono">Monospace / 等幅</option>
+          </select>
+        </label>
+
+        <div class="field full">
+          Window size / ウィンドウサイズ
+          <div class="window-size">
+            <label class="field">Width
+              <input id="widthInput" type="number" min="360" max="1600" step="20" value="1000">
+            </label>
+            <label class="field">Height
+              <input id="heightInput" type="number" min="100" max="600" step="10" value="190">
+            </label>
+            <button id="resizeButton" type="button">Apply size</button>
+          </div>
+        </div>
+      </div>
+
       <div class="steps">
         <button id="prepareButton" type="button">1. Prepare translation / 翻訳を準備</button>
         <button id="overlayButton" type="button">2. Open floating overlay / 字幕を開く</button>
@@ -194,18 +310,88 @@
     const startButton = document.querySelector("#startButton");
     const stopButton = document.querySelector("#stopButton");
     const statusBox = document.querySelector("#status");
+    const directionBadge = document.querySelector("#directionBadge");
+    const directionSelect = document.querySelector("#directionSelect");
+    const opacityInput = document.querySelector("#opacityInput");
+    const opacityOutput = document.querySelector("#opacityOutput");
+    const fontColorInput = document.querySelector("#fontColorInput");
+    const fontSizeInput = document.querySelector("#fontSizeInput");
+    const fontSizeOutput = document.querySelector("#fontSizeOutput");
+    const fontSelect = document.querySelector("#fontSelect");
+    const widthInput = document.querySelector("#widthInput");
+    const heightInput = document.querySelector("#heightInput");
+    const resizeButton = document.querySelector("#resizeButton");
 
     let translator = null;
     let recognition = null;
     let pipWindow = null;
-    let japaneseElement = null;
-    let englishElement = null;
+    let sourceElement = null;
+    let targetElement = null;
     let keepListening = false;
     let lastTranslationRequest = 0;
 
     function setStatus(message, kind = "normal") {
       statusBox.textContent = message;
       statusBox.dataset.kind = kind;
+    }
+
+    function getDirection() {
+      if (directionSelect.value === "en-ja") {
+        return {
+          sourceLanguage: "en",
+          targetLanguage: "ja",
+          speechLanguage: "en-US",
+          sourceName: "English",
+          targetName: "Japanese",
+          badge: "English → 日本語"
+        };
+      }
+
+      return {
+        sourceLanguage: "ja",
+        targetLanguage: "en",
+        speechLanguage: "ja-JP",
+        sourceName: "Japanese",
+        targetName: "English",
+        badge: "日本語 → English"
+      };
+    }
+
+    function getFontFamily() {
+      const families = {
+        sans: 'Arial, "Noto Sans JP", sans-serif',
+        serif: 'Georgia, "Noto Serif JP", serif',
+        mono: 'Consolas, "Noto Sans Mono", monospace'
+      };
+      return families[fontSelect.value] || families.sans;
+    }
+
+    function applyAppearance() {
+      opacityOutput.value = `${opacityInput.value}%`;
+      fontSizeOutput.value = `${fontSizeInput.value} px`;
+
+      if (!pipWindow || pipWindow.closed) return;
+
+      const opacity = Number(opacityInput.value) / 100;
+      const size = Number(fontSizeInput.value);
+      pipWindow.document.body.style.background = `rgba(0, 0, 0, ${opacity})`;
+      pipWindow.document.body.style.color = fontColorInput.value;
+      pipWindow.document.body.style.fontFamily = getFontFamily();
+
+      if (sourceElement) {
+        sourceElement.style.color = fontColorInput.value;
+        sourceElement.style.fontSize = `${Math.max(16, Math.round(size * .72))}px`;
+      }
+      if (targetElement) {
+        targetElement.style.color = fontColorInput.value;
+        targetElement.style.fontSize = `${size}px`;
+      }
+    }
+
+    function setOverlayPlaceholder() {
+      const direction = getDirection();
+      if (sourceElement) sourceElement.textContent = `Waiting for ${direction.sourceName} speech…`;
+      if (targetElement) targetElement.textContent = `${direction.targetName} translation will appear here.`;
     }
 
     function setSupport(id, available, label) {
@@ -239,24 +425,25 @@
         throw new Error("Chrome's built-in Translator API is unavailable.");
       }
 
+      const direction = getDirection();
       prepareButton.disabled = true;
-      setStatus("Checking Japanese → English translation…");
+      setStatus(`Checking ${direction.sourceName} → ${direction.targetName} translation…`);
 
       try {
         const availability = await Translator.availability({
-          sourceLanguage: "ja",
-          targetLanguage: "en"
+          sourceLanguage: direction.sourceLanguage,
+          targetLanguage: direction.targetLanguage
         });
 
         if (availability === "unavailable") {
-          throw new Error("The Japanese → English language pair is unavailable.");
+          throw new Error(`The ${direction.sourceName} → ${direction.targetName} language pair is unavailable.`);
         }
 
         setStatus("Preparing the translation model. Keep this page open…");
 
         translator = await Translator.create({
-          sourceLanguage: "ja",
-          targetLanguage: "en",
+          sourceLanguage: direction.sourceLanguage,
+          targetLanguage: direction.targetLanguage,
           monitor(monitor) {
             monitor.addEventListener("downloadprogress", (event) => {
               const percent = Math.round(event.loaded * 100);
@@ -283,8 +470,8 @@
       }
 
       pipWindow = await documentPictureInPicture.requestWindow({
-        width: 1000,
-        height: 190
+        width: Number(widthInput.value),
+        height: Number(heightInput.value)
       });
 
       pipWindow.document.title = "Live subtitles";
@@ -301,19 +488,20 @@
           padding: 14px 28px;
           overflow: hidden;
           color: white;
-          background: rgba(7, 8, 12, .90);
+          background: #000;
           font-family: Arial, "Noto Sans JP", sans-serif;
           text-align: center;
         }
         #subtitle { width: 100%; }
-        #japanese {
+        #sourceText {
           min-height: 32px;
           margin-bottom: 8px;
-          color: rgba(255, 255, 255, .78);
+          color: white;
+          opacity: .78;
           font-size: clamp(19px, 4vw, 27px);
           line-height: 1.25;
         }
-        #english {
+        #targetText {
           min-height: 45px;
           color: white;
           font-size: clamp(25px, 5.2vw, 38px);
@@ -327,30 +515,32 @@
       const subtitle = pipWindow.document.createElement("div");
       subtitle.id = "subtitle";
       subtitle.innerHTML = `
-        <div id="japanese">日本語を待っています…</div>
-        <div id="english">Waiting for Japanese speech…</div>
+        <div id="sourceText"></div>
+        <div id="targetText"></div>
       `;
       pipWindow.document.body.appendChild(subtitle);
 
-      japaneseElement = pipWindow.document.querySelector("#japanese");
-      englishElement = pipWindow.document.querySelector("#english");
+      sourceElement = pipWindow.document.querySelector("#sourceText");
+      targetElement = pipWindow.document.querySelector("#targetText");
+      setOverlayPlaceholder();
+      applyAppearance();
 
       pipWindow.addEventListener("pagehide", () => {
         pipWindow = null;
-        japaneseElement = null;
-        englishElement = null;
+        sourceElement = null;
+        targetElement = null;
         stopListening();
       });
 
       setStatus("Overlay open. Move it to the bottom of your screen, then continue to step 3.", "success");
     }
 
-    function updateJapanese(text) {
-      if (japaneseElement) japaneseElement.textContent = text;
+    function updateSource(text) {
+      if (sourceElement) sourceElement.textContent = text;
     }
 
-    function updateEnglish(text) {
-      if (englishElement) englishElement.textContent = text;
+    function updateTarget(text) {
+      if (targetElement) targetElement.textContent = text;
     }
 
     function buildRecognition() {
@@ -358,8 +548,9 @@
         throw new Error("Speech recognition is unavailable in this browser.");
       }
 
+      const direction = getDirection();
       const instance = new SpeechRecognitionClass();
-      instance.lang = "ja-JP";
+      instance.lang = direction.speechLanguage;
       instance.continuous = true;
       instance.interimResults = true;
       instance.maxAlternatives = 1;
@@ -374,19 +565,19 @@
           else interimText += text;
         }
 
-        if (interimText.trim()) updateJapanese(interimText.trim());
+        if (interimText.trim()) updateSource(interimText.trim());
         if (!finalText.trim()) return;
 
-        const japanese = finalText.trim();
+        const sourceText = finalText.trim();
         const requestNumber = ++lastTranslationRequest;
-        updateJapanese(japanese);
-        updateEnglish("Translating…");
+        updateSource(sourceText);
+        updateTarget("Translating…");
 
         try {
-          const english = await translator.translate(japanese);
-          if (requestNumber === lastTranslationRequest) updateEnglish(english);
+          const translated = await translator.translate(sourceText);
+          if (requestNumber === lastTranslationRequest) updateTarget(translated);
         } catch (error) {
-          updateEnglish("Translation error");
+          updateTarget("Translation error");
           setStatus(error.message || "Translation failed.", "error");
         }
       };
@@ -421,7 +612,7 @@
 
     function startListening() {
       if (!translator) throw new Error("Complete step 1 first: Prepare translation.");
-      if (!pipWindow || pipWindow.closed || !japaneseElement) {
+      if (!pipWindow || pipWindow.closed || !sourceElement) {
         throw new Error("Complete step 2 first: Open the floating overlay.");
       }
 
@@ -431,7 +622,7 @@
       recognition.start();
       startButton.disabled = true;
       stopButton.disabled = false;
-      setStatus("Listening for Japanese. Speak in short sentences and pause naturally.", "success");
+      setStatus(`Listening for ${getDirection().sourceName}. Speak in short sentences and pause naturally.`, "success");
     }
 
     function stopListening() {
@@ -442,6 +633,35 @@
       startButton.disabled = false;
       stopButton.disabled = true;
       setStatus("Listening stopped.");
+    }
+
+    function changeDirection() {
+      stopListening();
+      recognition = null;
+      lastTranslationRequest += 1;
+
+      if (translator && typeof translator.destroy === "function") {
+        translator.destroy();
+      }
+      translator = null;
+
+      const direction = getDirection();
+      directionBadge.textContent = direction.badge;
+      setOverlayPlaceholder();
+      setStatus(`Direction changed to ${direction.sourceName} → ${direction.targetName}. Prepare translation again.`);
+    }
+
+    function resizeOverlay() {
+      if (!pipWindow || pipWindow.closed) {
+        throw new Error("Open the floating overlay before applying its size.");
+      }
+
+      const width = Math.min(1600, Math.max(360, Number(widthInput.value) || 1000));
+      const height = Math.min(600, Math.max(100, Number(heightInput.value) || 190));
+      widthInput.value = String(width);
+      heightInput.value = String(height);
+      pipWindow.resizeTo(width, height);
+      setStatus(`Overlay size requested: ${width} × ${height}. Chrome may limit the final size.`, "success");
     }
 
     prepareButton.addEventListener("click", async () => {
@@ -460,8 +680,18 @@
     });
 
     stopButton.addEventListener("click", stopListening);
+    directionSelect.addEventListener("change", changeDirection);
+    opacityInput.addEventListener("input", applyAppearance);
+    fontColorInput.addEventListener("input", applyAppearance);
+    fontSizeInput.addEventListener("input", applyAppearance);
+    fontSelect.addEventListener("change", applyAppearance);
+    resizeButton.addEventListener("click", () => {
+      try { resizeOverlay(); }
+      catch (error) { setStatus(error.message || "Could not resize the overlay.", "error"); }
+    });
     window.addEventListener("beforeunload", stopListening);
 
+    applyAppearance();
     checkBrowserSupport();
   </script>
 </body>
